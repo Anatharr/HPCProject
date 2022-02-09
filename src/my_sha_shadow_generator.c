@@ -3,10 +3,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+// #include <unistd.h>
 #include <sys/types.h>
-#include <sys/wait.h>
-#include <openssl/sha.h>
+// #include <sys/wait.h>
+// #include <openssl/sha.h>
 #include <string.h>
 
 char * readline(FILE * f)
