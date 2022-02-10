@@ -13,6 +13,7 @@
 #define DEBUG 0
 #define WL_BLOCK 1000
 #define MAX_LINE_SIZE 1024
+#define MAX_SHADOW_LENGTH 5000
 
 // Default maximum number of simultaneous process
 int MAX_FILS = 5;
@@ -33,37 +34,27 @@ char *readline(FILE *f)
 	return NULL;
 }
 
-__global__ void print_myself(const int ID, char **wordlist, int lines)
+__global__ void print_myself(const int ID, char **wordlist, int lines, char **shadow_db)
 {
-	printf("[%d] Cracking hash\n", ID);
+
+	printf("[Block - %d] Cracking hash %s\n", ID);
 	for (int i = 0; i < lines; i++)
 	{
 		printf("[%d] Wordlist : %s\n", ID, wordlist[i]);
 	}
 }
 
-// __global__ bool check_hash(const char *hash, FILE *wordlist_fd)
+// __global__ bool check_hash(const char *hash, char **wordlist_block, int wordlist_block_size)
 // {
-// 	// char *readlineGPU(FILE * f)	{
-// 	// 	char *line = NULL;
 
-// 	// 	size_t len = 0;
-// 	// 	ssize_t read;
-// 	// 	if ((read = getline(&line, &len, f)) != -1)
-// 	// 	{
-// 	// 		line[read - 2] = '\0';
-
-// 	// 		return line;
-// 	// 	}
-// 	// 	return NULL;
-// 	// }
-
-// 	char *plain_text;
-// 	while ((plain_text = readline(wordlist_fd)) != NULL)
+// 	for (int i = 0; i < wordlist_block_size; i++)
 // 	{
-// 		size_t plain_length = strlen(plain_text);
+// 		char *plain_passwd_test = wordlist_block[i];
 // 		unsigned char test_hash[SHA_DIGEST_LENGTH];
-// 		SHA1((const unsigned char *)plain_text, plain_length, test_hash);
+// 		size_t plain_length = strlen(wordlist_block[i]);
+
+// 		SHA1((const unsigned char *)plain_passwd_test, plain_length, test_hash);
+
 // 		if (strcmp((const char *)test_hash, hash) == 0)
 // 		{
 // 			return true;
@@ -81,19 +72,42 @@ int main(int argc, char *argv[])
 	char *dict_file = argv[3];
 	char *shasum_file = argv[4];
 
-	// opening file
+	// opening files
 	FILE *shadow_fd = fopen(shasum_file, "r");
 	FILE *wordlist_fd = fopen(dict_file, "r");
 	if (shadow_fd == NULL || wordlist_fd == NULL)
 		exit(EXIT_FAILURE);
 
-	/* ---------------- PART 1 ---------------- */
-	int block_counter = 0;
+	/* ------------- Loading shadow db ------------- */
+	char shadow_db[MAX_SHADOW_LENGTH][MAX_LINE_SIZE];
+	char shadow_dbGPU[MAX_SHADOW_LENGTH][MAX_LINE_SIZE];
+	char *line = NULL;
+	ssize_t read;
+	size_t len = 0;
+	int shadow_count = 0;
 
+	while ((read = getline(&line, &len, shadow_fd)) != -1)
+	{
+		// sprintf(shadow_db[i], "%s", line);
+		strcpy(shadow_db[shadow_count], line);
+		shadow_count++;
+	}
+	// cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
+	// cudaMemcpy(lineBufferGPU, lineBuffer, sizeof(char *) * lines, cudaMemcpyHostToDevice);
+
+	// printf("[DEBUG] Shadow content - head : \n");
+	// for (int i = 0; i < 10; i++)
+	// {
+	// 	printf("[%i] : %s\n", i, shadow_db[i]);
+	// }
+
+	/* ------------- Creating first parrallelisation by dividing wordlist (divide&conquer strategy) ------------- */
+
+	int block_counter = 0;
 	while (true)
 	{
 		size_t lines = 0; /** next index to be used with lineBuffer
-				  (and number of lines already stored)*/
+					(and number of lines already stored)*/
 		char *lineBuffer[WL_BLOCK];
 		char buf[MAX_LINE_SIZE];
 		while (lines < WL_BLOCK && fgets(buf, sizeof(buf), wordlist_fd) != NULL)
@@ -111,22 +125,16 @@ int main(int argc, char *argv[])
 
 		char **lineBufferGPU;
 		cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
-		cudaMemcpy(lineBufferGPU, lineBuffer, sizeof(char *)*lines, cudaMemcpyHostToDevice);
-		print_myself<<<M, T>>>(block_counter, lineBufferGPU, lines);
+		cudaMemcpy(lineBufferGPU, lineBuffer, sizeof(char *) * lines, cudaMemcpyHostToDevice);
+		print_myself<<<M, T>>>(block_counter, lineBufferGPU, lines, (char**) shadow_db);
 
 		// for (int i = 0; i < lines; i++)
 		// {
 		// 	free(lineBuffer[i]);
 		// }
+
+		cudaDeviceSynchronize();
 	}
 
-	cudaDeviceSynchronize();
-
-	/* ---------------- PART 2 ---------------- */
-	// char *current_password;
-	// while ((current_password = readline(shadow_fd)) != NULL)
-	// {
-	// 	check_hash<<<M, T>>>(current_password, wordlist_fd);
-	// }
 	return 0;
 }
