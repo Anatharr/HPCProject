@@ -32,13 +32,13 @@ char *readline(FILE *f)
 	return NULL;
 }
 
-__global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_hash, int lines, char **shadow_db)
+__global__ void check_hash(char **wordlist_block, int lines, char **shadow_db)
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
-	printf("%p %p index=%d\n", wordlist_block_hash, wordlist_block_plain, index);
+	// printf("%p index=%d\n", wordlist_block, index);
 	char *current_hash = shadow_db[index];
 
-	printf("[Block - %d] Cracking hash %s (%d)\n", current_hash, index);
+	printf("[Block - %d] Cracking hash %s (%d)\n", current_hash, wordlist_block[index], index);
 	// for (int i = 0; i < lines; i++)
 	// {
 	// 	bool ok = true;
@@ -124,33 +124,12 @@ int main(int argc, char *argv[])
 		size_t lines = 0; /** next index to be used with lineBuffer
 					(and number of lines already stored)*/
 		char *lineBuffer[WL_BLOCK];
-		char *lineBuffer_plain[WL_BLOCK];
-		char *lineBuffer_hash[WL_BLOCK];
-		char **lineBufferGPU_hash;
-		char **lineBufferGPU_plain;
 		char buf[MAX_LINE_SIZE];
-
 		while (lines < WL_BLOCK && fgets(buf, sizeof(buf), wordlist_fd) != NULL)
 		{
 			buf[strlen(buf) - 1] = '\0';
-			int space_index = 0;
-			for (int i = 0; i < strlen(buf); i++)
-			{
-				if (buf[i] == ' ')
-				{
-					buf[i]='\0';
-					space_index = i;
-					break;
-				}
-			}
-
-			// cudaMalloc(&lineBuffer[lines], strlen(buf) * sizeof(char));
-			cudaMallocManaged(&lineBuffer_plain[lines], strlen(buf) * sizeof(char));
-			// cudaMallocManaged(&lineBuffer_hash[lines],  strlen(buf) * sizeof(char));
-			cudaMemcpy(lineBuffer_plain[lines], buf, strlen(buf), cudaMemcpyHostToDevice);
-			// cudaMemcpy(lineBuffer_hash[lines], buf+space_index+1, strlen(buf+space_index+1), cudaMemcpyHostToDevice);
-
-			printf("DEBUG : %p\n", lineBuffer_plain[lines]);
+			cudaMallocManaged(&lineBuffer[lines], strlen(buf) * sizeof(char));
+			cudaMemcpy(lineBuffer[lines], buf, strlen(buf), cudaMemcpyHostToDevice);
 			lines++;
 		}
 		if (lines == 0)
@@ -159,17 +138,14 @@ int main(int argc, char *argv[])
 		block_counter++;
 		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 
-		// cudaMalloc(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
-		cudaMallocManaged(lineBufferGPU_hash,  lines * MAX_LINE_SIZE * sizeof(char));
-		cudaMallocManaged(lineBufferGPU_plain, lines * MAX_LINE_SIZE * sizeof(char));
-		cudaMemcpy(lineBufferGPU_hash,  lineBuffer_hash,  lines * MAX_LINE_SIZE * sizeof(char), cudaMemcpyHostToDevice);
-		cudaMemcpy(lineBufferGPU_plain, lineBuffer_plain, lines * MAX_LINE_SIZE * sizeof(char), cudaMemcpyHostToDevice);
-		printf("%p %p\n", lineBufferGPU_hash, lineBuffer_plain);
-		check_hash<<<M, T>>>(lineBufferGPU_plain, lineBufferGPU_hash, lines, shadow_dbGPU);
+		char **lineBufferGPU;
+		cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
+		cudaMemcpy(lineBufferGPU, lineBuffer, sizeof(char *) * lines, cudaMemcpyHostToDevice);
+		check_hash<<<M, T>>>(lineBufferGPU, lines, shadow_dbGPU);
 
 		// for (int i = 0; i < lines; i++)
 		// {
-		// 	cudaFree(lineBuffer[i]);
+		//     free(lineBuffer[i]);
 		// }
 
 		cudaDeviceSynchronize();
