@@ -5,13 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <openssl/sha.h>
 #include <string.h>
 
 #define DEBUG 0
 #define WL_BLOCK 1000
-#define MAX_LINE_SIZE 1024
+#define MAX_LINE_SIZE 50
 #define MAX_SHADOW_LENGTH 5000
+#define MAX_HASH_LENGTH 50
 
 // Default maximum number of simultaneous process
 int MAX_FILS = 5;
@@ -32,17 +32,31 @@ char *readline(FILE *f)
 	return NULL;
 }
 
-__global__ void print_myself(const int ID, char **wordlist, int lines, char **shadow_db)
+__global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_hash, int lines, char **shadow_db)
 {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	printf("%p %p index=%d\n", wordlist_block_hash, wordlist_block_plain, index);
+	char *current_hash = shadow_db[index];
 
-	printf("[Block - %d] Cracking hash %s\n", ID);
-	for (int i = 0; i < lines; i++)
-	{
-		printf("[%d] Wordlist : %s\n", ID, wordlist[i]);
-	}
+	printf("[Block - %d] Cracking hash %s (%d)\n", current_hash, index);
+	// for (int i = 0; i < lines; i++)
+	// {
+	// 	bool ok = true;
+	// 	for (int v = 0; v < MAX_HASH_LENGTH; v++)
+	// 	{
+	// 		if (current_hash[v] == '\0' || wordlist_block_hash[i][v] == '\0' || current_hash[v] != wordlist_block_hash[i][v])
+	// 		{
+	// 			ok = false;
+	// 			break;
+	// 		}
+	// 	}
+	// 	if (ok)
+	// 		printf("[+] FOUND %s\n", wordlist_block_plain);
+	// 	break;
+	// }
 }
 
-// __global__ bool check_hash(const char *hash, char **wordlist_block, int wordlist_block_size)
+// bool check_hash(const char *hash, char **wordlist_block, int wordlist_block_size)
 // {
 
 // 	for (int i = 0; i < wordlist_block_size; i++)
@@ -63,10 +77,10 @@ __global__ void print_myself(const int ID, char **wordlist, int lines, char **sh
 
 int main(int argc, char *argv[])
 {
-	if (argc < 5)
-		fprintf(stderr, "Usage: '%s' nb_blocks nb_threads dictionnary_file shasum_file\n", argv[0]), exit(EXIT_FAILURE);
-	int M = strtol(argv[1], NULL, 10);
-	int T = strtol(argv[2], NULL, 10);
+	if (argc < 3)
+		fprintf(stderr, "Usage: '%s' dictionnary_file shasum_file\n", argv[0]), exit(EXIT_FAILURE);
+	// int M = strtol(argv[1], NULL, 10);
+	// int T = strtol(argv[2], NULL, 10);
 	char *dict_file = argv[3];
 	char *shasum_file = argv[4];
 
@@ -76,23 +90,26 @@ int main(int argc, char *argv[])
 	if (shadow_fd == NULL || wordlist_fd == NULL)
 		exit(EXIT_FAILURE);
 
-	/* ------------- Loading shadow db ------------- */
+	/* ------------- Loading shadow db into device ------------- */
 	char shadow_db[MAX_SHADOW_LENGTH][MAX_LINE_SIZE];
-	char shadow_dbGPU[MAX_SHADOW_LENGTH][MAX_LINE_SIZE];
+	char **shadow_dbGPU;
 	char *line = NULL;
-	ssize_t read;
 	size_t len = 0;
 	int shadow_count = 0;
 
-	while ((read = getline(&line, &len, shadow_fd)) != -1)
+	while ((getline(&line, &len, shadow_fd)) != -1)
 	{
 		// sprintf(shadow_db[i], "%s", line);
 		strcpy(shadow_db[shadow_count], line);
 		shadow_count++;
 	}
-	// cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
-	// cudaMemcpy(lineBufferGPU, lineBuffer, sizeof(char *) * lines, cudaMemcpyHostToDevice);
 
+	cudaMallocManaged(shadow_dbGPU, MAX_SHADOW_LENGTH * MAX_LINE_SIZE * sizeof(char));
+	cudaMemcpy(shadow_dbGPU, shadow_db, MAX_SHADOW_LENGTH * MAX_LINE_SIZE * sizeof(char), cudaMemcpyHostToDevice);
+
+	/* ------- Optimizing number of threads & blocks based on 0.5 ratio ------ */
+	int M = ceil((double)shadow_count / sqrt((shadow_count / 0.5)));
+	int T = ceil((double)shadow_count / (double)M);
 	// printf("[DEBUG] Shadow content - head : \n");
 	// for (int i = 0; i < 10; i++)
 	// {
@@ -107,12 +124,33 @@ int main(int argc, char *argv[])
 		size_t lines = 0; /** next index to be used with lineBuffer
 					(and number of lines already stored)*/
 		char *lineBuffer[WL_BLOCK];
+		char *lineBuffer_plain[WL_BLOCK];
+		char *lineBuffer_hash[WL_BLOCK];
+		char **lineBufferGPU_hash;
+		char **lineBufferGPU_plain;
 		char buf[MAX_LINE_SIZE];
+
 		while (lines < WL_BLOCK && fgets(buf, sizeof(buf), wordlist_fd) != NULL)
 		{
 			buf[strlen(buf) - 1] = '\0';
-			cudaMallocManaged(&lineBuffer[lines], strlen(buf) * sizeof(char));
-			cudaMemcpy(lineBuffer[lines], buf, strlen(buf), cudaMemcpyHostToDevice);
+			int space_index = 0;
+			for (int i = 0; i < strlen(buf); i++)
+			{
+				if (buf[i] == ' ')
+				{
+					buf[i]='\0';
+					space_index = i;
+					break;
+				}
+			}
+
+			// cudaMalloc(&lineBuffer[lines], strlen(buf) * sizeof(char));
+			cudaMallocManaged(&lineBuffer_plain[lines], strlen(buf) * sizeof(char));
+			// cudaMallocManaged(&lineBuffer_hash[lines],  strlen(buf) * sizeof(char));
+			cudaMemcpy(lineBuffer_plain[lines], buf, strlen(buf), cudaMemcpyHostToDevice);
+			// cudaMemcpy(lineBuffer_hash[lines], buf+space_index+1, strlen(buf+space_index+1), cudaMemcpyHostToDevice);
+
+			printf("DEBUG : %p\n", lineBuffer_plain[lines]);
 			lines++;
 		}
 		if (lines == 0)
@@ -121,14 +159,17 @@ int main(int argc, char *argv[])
 		block_counter++;
 		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 
-		char **lineBufferGPU;
-		cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
-		cudaMemcpy(lineBufferGPU, lineBuffer, sizeof(char *) * lines, cudaMemcpyHostToDevice);
-		print_myself<<<M, T>>>(block_counter, lineBufferGPU, lines, (char**) shadow_db);
+		// cudaMalloc(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
+		cudaMallocManaged(lineBufferGPU_hash,  lines * MAX_LINE_SIZE * sizeof(char));
+		cudaMallocManaged(lineBufferGPU_plain, lines * MAX_LINE_SIZE * sizeof(char));
+		cudaMemcpy(lineBufferGPU_hash,  lineBuffer_hash,  lines * MAX_LINE_SIZE * sizeof(char), cudaMemcpyHostToDevice);
+		cudaMemcpy(lineBufferGPU_plain, lineBuffer_plain, lines * MAX_LINE_SIZE * sizeof(char), cudaMemcpyHostToDevice);
+		printf("%p %p\n", lineBufferGPU_hash, lineBuffer_plain);
+		check_hash<<<M, T>>>(lineBufferGPU_plain, lineBufferGPU_hash, lines, shadow_dbGPU);
 
 		// for (int i = 0; i < lines; i++)
 		// {
-		// 	free(lineBuffer[i]);
+		// 	cudaFree(lineBuffer[i]);
 		// }
 
 		cudaDeviceSynchronize();

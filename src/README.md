@@ -32,3 +32,5 @@ Please take note of your Perl installation folder.
 - [ ] nice documentation (func docstring, comments)
 - [ ] correct use of naming case
 - [ ] clean pre-link directive 
+- [ ] optimisation  shadow_size, `if index > shadow_size` -> do nothing
+- [ ] if a hash is already found, put him in memory to optimize the next guesses
