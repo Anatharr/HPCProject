@@ -3,10 +3,8 @@
 // usage : nb_of_processus dictionnary_file shasum_file
 
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <openssl/sha.h>
 #include <string.h>
 
@@ -65,7 +63,7 @@ __global__ void print_myself(const int ID, char **wordlist, int lines, char **sh
 
 int main(int argc, char *argv[])
 {
-	if (argc < 4)
+	if (argc < 5)
 		fprintf(stderr, "Usage: '%s' nb_blocks nb_threads dictionnary_file shasum_file\n", argv[0]), exit(EXIT_FAILURE);
 	int M = strtol(argv[1], NULL, 10);
 	int T = strtol(argv[2], NULL, 10);
@@ -121,7 +119,7 @@ int main(int argc, char *argv[])
 			break;
 
 		block_counter++;
-		printf("[+] Assigned block %d (read %ld lines)\n", block_counter, lines);
+		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 
 		char **lineBufferGPU;
 		cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
