@@ -3,10 +3,8 @@
 // usage : nb_of_processus dictionnary_file shasum_file
 
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <openssl/sha.h>
 #include <string.h>
 
@@ -14,32 +12,13 @@
 #define WL_BLOCK 1000
 #define MAX_LINE_SIZE 1024
 
-// Default maximum number of simultaneous process
-int MAX_FILS = 5;
-
-// wraup for readline
-char *readline(FILE *f)
-{
-	char *line = NULL;
-
-	size_t len = 0;
-	ssize_t read;
-	if ((read = getline(&line, &len, f)) != -1)
-	{
-		line[read - 2] = '\0';
-
-		return line;
-	}
-	return NULL;
-}
-
 __global__ void print_myself(const int ID, char **wordlist, int lines)
 {
-	printf("[%d] Cracking hash\n", ID);
-	for (int i = 0; i < lines; i++)
-	{
-		printf("[%d] Wordlist : %s\n", ID, wordlist[i]);
-	}
+	printf("[%d] Cracking hash (testing against %d lines)\n", ID, lines);
+	// for (int i = 0; i < lines; i++)
+	// {
+	// 	printf("[%d] Wordlist : %s\n", ID, wordlist[i]);
+	// }
 }
 
 // __global__ bool check_hash(const char *hash, FILE *wordlist_fd)
@@ -74,7 +53,7 @@ __global__ void print_myself(const int ID, char **wordlist, int lines)
 
 int main(int argc, char *argv[])
 {
-	if (argc < 4)
+	if (argc < 5)
 		fprintf(stderr, "Usage: '%s' nb_blocks nb_threads dictionnary_file shasum_file\n", argv[0]), exit(EXIT_FAILURE);
 	int M = strtol(argv[1], NULL, 10);
 	int T = strtol(argv[2], NULL, 10);
@@ -107,7 +86,7 @@ int main(int argc, char *argv[])
 			break;
 
 		block_counter++;
-		printf("[+] Assigned block %d (read %ld lines)\n", block_counter, lines);
+		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 
 		char **lineBufferGPU;
 		cudaMallocManaged(&lineBufferGPU, lines * MAX_LINE_SIZE * sizeof(char));
