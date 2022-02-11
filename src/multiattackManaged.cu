@@ -119,23 +119,18 @@ int main(int argc, char *argv[])
 	double M_T_RATIO = 0.5;
 
 	// parsing arguments
-	bool error_flag = false;
-	if (argc < 3)
-		error_flag = true;
-	else if (argc == 4)
+	switch (argc)
 	{
-		sscanf(argv[3], "%lf", &M_T_RATIO);
-	}
-	else if (argc == 5)
-	{
+	case 5:
 		DISABLE_PBAR = (bool)atoi(argv[4]);
+	case 4:
+		sscanf(argv[3], "%lf", &M_T_RATIO);
+	case 3:
+		break;
+	default:
+		fprintf(stderr, "Usage: '%s' dictionnary_file shasum_file [ratio] [disable_pbar]\n", argv[0]), exit(EXIT_FAILURE);
+		break;
 	}
-	else if (argc > 5)
-	{
-		error_flag = true;
-	}
-	if (error_flag)
-		fprintf(stderr, "Usage: '%s' dictionnary_file shasum_file\n", argv[0]), exit(EXIT_FAILURE);
 	char *dict_file = argv[1];
 	char *shasum_file = argv[2];
 
@@ -248,11 +243,11 @@ int main(int argc, char *argv[])
 
 		clock_t parrallel_exec_time_beg = clock();
 		check_hash<<<M, T>>>(lineBuffer_plainGPU, lineBuffer_hashGPU, lines, shadow_dbGPU, shadow_count);
+		cudaDeviceSynchronize();
 		clock_t parrallel_exec_time_end = clock();
 		double parallel_instance_time_spent = (double)(parrallel_exec_time_end - parrallel_exec_time_beg) / CLOCKS_PER_SEC;
 		parallel_exec_time += parallel_instance_time_spent;  
 
-		cudaDeviceSynchronize();
 	}
 
 	/* ------------ Benchmarking - writing results to csv ---------- */

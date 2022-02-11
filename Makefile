@@ -1,4 +1,4 @@
-all: managed unmanaged
+all: managed unmanaged optimized
 
 managed:
 	nvcc ./src/multiattackManaged.cu -o ./bin/attackManaged
@@ -16,7 +16,7 @@ run_unmanaged:
 	./bin/attackUnmanaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
 
 benchmark: 
-	python3 ./src/benchmark.py
+	python ./src/benchmark.py
 
 clean: 
 	rm ./bin/attack
