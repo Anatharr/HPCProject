@@ -19,6 +19,14 @@
 // Progress bar
 #define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
 
+/**
+ * @brief check a hash by comparing it with the ones on the wordlist's block and write the according plain text in an array return to the host
+ * @param wordlist_block_plain (char **) resulting column of the wordlist's block plaintexts
+ * @param wordlist_block_hash (char **)resulting column of the wordlist's block hashes
+ * @param lines (int) number of entry in the wordlist block
+ * @param shadow_db (char **)
+ * @param shadow_count (int) number of hashes in the shadow file
+*/
 __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_hash, int lines, char **shadow_db, int shadow_count)
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,6 +62,11 @@ __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_ha
 	}
 }
 
+/**
+ * @brief count the lines in a file specified by his opaque stream type
+ * @param fp (FILE*) pointer to the stream file
+ * @return the number of lines in the file
+*/
 int countlines_from_fp(FILE *fp)
 {
 	// count the number of lines in the file called filename
@@ -77,6 +90,11 @@ int countlines_from_fp(FILE *fp)
 	return lines;
 }
 
+/**
+ * Update the progress bar according to the current wordlist block treated regarding the total number of wordlist blocks 
+ * @param current_block (int) index of the current wordlist block treated
+ * @param total_num_of_block (int) total number of wordlist blocks
+*/
 void updatePBar(int current_block, int total_num_of_block)
 {
 	double percentage = (double)current_block / total_num_of_block;
