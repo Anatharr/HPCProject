@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include <string.h>
 
-#define DEBUG true
+#define DEBUG false
 #define WL_BLOCK 1000
 #define MAX_LINE_LENGTH 200
 #define MAX_SHADOW_LENGTH 5000
@@ -16,47 +16,36 @@
 __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_hash, int lines, char **shadow_db, int shadow_count)
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
-	if (blockIdx.x==0 && index < shadow_count) {
+	if (index < shadow_count)
+	{
 		char *current_hash = shadow_db[index];
 
-		printf("[Thread - (%d,%d)] Cracking hash %s (%d)\n", blockIdx.x, threadIdx.x, current_hash, index);
+		#if DEBUG
+			printf("[Thread - (%d,%d)] Cracking hash %s (%d)\n", blockIdx.x, threadIdx.x, current_hash, index);
+		#endif
 		for (int i = 0; i < lines; i++)
 		{
-			printf("[Thread - (%d,%d)] Testing '%s' (%s)\n", blockIdx.x, threadIdx.x, wordlist_block_plain[i], wordlist_block_hash[i]);
-		// 	bool ok = true;
-		// 	for (int v = 0; v < MAX_HASH_LENGTH; v++)
-		// 	{
-		// 		if (current_hash[v] == '\0' || wordlist_block_hash[i][v] == '\0' || current_hash[v] != wordlist_block_hash[i][v])
-		// 		{
-		// 			ok = false;
-		// 			break;
-		// 		}
-		// 	}
-		// 	if (ok)
-		// 		printf("[+] FOUND %s\n", wordlist_block_plain);
-		// 	break;
+			#if DEBUG
+				printf("[Thread - (%d,%d)] Testing '%s' (%s)\n", blockIdx.x, threadIdx.x, wordlist_block_plain[i], wordlist_block_hash[i]);
+			#endif
+			bool ok = true;
+			for (int v = 0; v < MAX_HASH_LENGTH; v++)
+			{
+				if (current_hash[v] == '\0' && wordlist_block_hash[i][v] == '\0')
+					break;
+				if (current_hash[v] != wordlist_block_hash[i][v] || current_hash[v] == '\0' || wordlist_block_hash[i][v] == '\0')
+				{
+					ok = false;
+					break;
+				}
+			}
+			if (ok) {
+				printf("[+] FOUND %s for hash %s (shadow_index = %d)\n", wordlist_block_plain[i], current_hash, index);
+				break;
+			}
 		}
 	}
 }
-
-// bool check_hash(const char *hash, char **wordlist_block, int wordlist_block_size)
-// {
-
-// 	for (int i = 0; i < wordlist_block_size; i++)
-// 	{
-// 		char *plain_passwd_test = wordlist_block[i];
-// 		unsigned char test_hash[SHA_DIGEST_LENGTH];
-// 		size_t plain_length = strlen(wordlist_block[i]);
-
-// 		SHA1((const unsigned char *)plain_passwd_test, plain_length, test_hash);
-
-// 		if (strcmp((const char *)test_hash, hash) == 0)
-// 		{
-// 			return true;
-// 		};
-// 	}
-// 	return false;
-// }
 
 int main(int argc, char *argv[])
 {
@@ -69,11 +58,11 @@ int main(int argc, char *argv[])
 	// opening files
 	FILE *shadow_file = fopen(shasum_file, "r");
 	FILE *wordlist_file = fopen(dict_file, "r");
-	if (shadow_file == NULL || wordlist_file == NULL) {
+	if (shadow_file == NULL || wordlist_file == NULL)
+	{
 		printf("Error while opening %s file\n", shadow_file == NULL ? "shadow" : "wordlist");
 		exit(EXIT_FAILURE);
 	}
-
 
 	/* ------------- Loading shadow db into device ------------- */
 	char *shadow_db[MAX_SHADOW_LENGTH];
@@ -85,13 +74,13 @@ int main(int argc, char *argv[])
 	while ((fgets(buf, MAX_LINE_LENGTH, shadow_file)) != NULL)
 	{
 		buf[strlen(buf) - 1] = '\0'; // remove the trailing newline
-		#if DEBUG
-			// printf("address:%p -> %s\n", buf, buf);
-		#endif
+#if DEBUG
+		printf("address:%p -> %s\n", buf, buf);
+#endif
 		cudaMallocManaged(&shadow_db[shadow_count], strlen(buf));
 		cudaMemcpy(shadow_db[shadow_count], buf, strlen(buf), cudaMemcpyHostToDevice);
 		shadow_count++;
-	}	
+	}
 
 	cudaMallocManaged(&shadow_dbGPU, shadow_count * sizeof(char *));
 	cudaMemcpy(shadow_dbGPU, shadow_db, shadow_count * sizeof(char *), cudaMemcpyHostToDevice);
@@ -104,14 +93,13 @@ int main(int argc, char *argv[])
 	// 	}
 	// #endif
 
-
 	/* ------- Optimizing number of threads & blocks based on 0.5 ratio ------ */
 	int M = ceil((double)shadow_count / sqrt((shadow_count / 0.5)));
 	int T = ceil((double)shadow_count / (double)M);
 
-	#if DEBUG
-		printf("[DEBUG] Computed values : M=%d ; T=%d\n", M, T);
-	#endif
+#if DEBUG
+	printf("[DEBUG] Computed values : M=%d ; T=%d\n", M, T);
+#endif
 
 	/* ------------- Creating first parrallelisation by dividing wordlist into several blocks (divide & conquer strategy) ------------- */
 
@@ -127,12 +115,15 @@ int main(int argc, char *argv[])
 		{
 			char *plain, *hash;
 			buf[strlen(buf) - 1] = '\0'; // remove trailing newline
-			for (int v = 0; v < MAX_LINE_LENGTH; v++) {
-				if (buf[v] == '\0') {
+			for (int v = 0; v < MAX_LINE_LENGTH; v++)
+			{
+				if (buf[v] == '\0')
+				{
 					printf("ERROR: invalid input line \"%s\" in wordlist\n", buf);
 					exit(EXIT_FAILURE);
 				}
-				if (buf[v] == ' ') {
+				if (buf[v] == ' ')
+				{
 					buf[v] = '\0';
 					plain = buf;
 					hash = buf + v + 1;
@@ -151,8 +142,9 @@ int main(int argc, char *argv[])
 			break;
 
 		block_counter++;
+#if DEBUG
 		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
-
+#endif
 		char **lineBuffer_plainGPU, **lineBuffer_hashGPU;
 		cudaMallocManaged(&lineBuffer_plainGPU, lines * sizeof(char *));
 		cudaMemcpy(lineBuffer_plainGPU, lineBuffer_plain, lines * sizeof(char *), cudaMemcpyHostToDevice);
