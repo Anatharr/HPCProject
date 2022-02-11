@@ -244,7 +244,7 @@ int main(int argc, char *argv[])
 #endif
 
 	FILE* csv_fp = fopen("./report/benchmark.csv", "a");
-	fprintf(csv_fp,"\n%lf, %lf, %lf, %d\n", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
+	fprintf(csv_fp,"\n%lf, %lf, %lf, %d", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
 	fclose(csv_fp);
 	return 0;
 }
