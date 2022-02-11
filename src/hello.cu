@@ -3,41 +3,38 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
 
-// __global__ void cuda_hello(int id){
-// 	printf("Hello World du GPU %d\n", id);
-// }
+__device__ char *dev_plain;
+
+__global__ void cuda_hello(){
+	int length = 5;
+	dev_plain = new char[length];
+	dev_plain[0] = 'z';
+	dev_plain[1] = 'g';
+	dev_plain[2] = 'e';
+	dev_plain[3] = 'g';
+	dev_plain[4] = '\0';
+	printf("GPU %s\n", dev_plain);
+	printf("Hello World du GPU\n");
+}
 
 int main(int argc, char **argv) {
-	if (argc<2) {
-		printf("Usage: %s <file>", argv[0]);
-		exit(EXIT_FAILURE);
-	}
 
-	FILE *shadow_fd = fopen(argv[1], "r");
-	char shadow_db[5000][50];
+	printf("Hello World du CPU\n");
 
-	if (shadow_fd == NULL)
-		exit(EXIT_FAILURE);
+	char *d_plain = NULL;
+	char plain[10];
+	
+	cuda_hello<<<1,1>>>();
 
-	int line = 0;
+    cudaDeviceSynchronize();
 
-	while ((fgets(shadow_db[line], 50, shadow_fd)) != NULL)
-	{
-		shadow_db[line][strlen(shadow_db[line]) - 1] = '\0';
-		printf("address:%p -> %s\n", shadow_db[line], shadow_db[line]);
-		line++;
-	}
+	printf("%p %p %p\n", plain, d_plain, &d_plain);
+	cudaMemcpyFromSymbol(&d_plain, "dev_plain", sizeof(d_plain), 0, cudaMemcpyDeviceToHost);
+	printf("%p %p %p\n", plain, d_plain, &d_plain);
+	cudaMemcpy(plain, d_plain, 10*sizeof(char), cudaMemcpyDeviceToHost);
 
-	printf("[DEBUG] Shadow content - head : \n");
-	for (int i = 0; i < 10; i++)
-	{
-		printf("[%i] : %s\n", i, shadow_db[i]);
-	}
+	// printf("ERROR %s : %s\n", cudaGetErrorName(err), cudaGetErrorString(err));
+	printf("plain %x %x %x %s\n", plain[0], plain[1], plain[2], plain);
 
-	// printf("Hello World du CPU\n");
-    // for (int i=0;i<10;i++) {
-	//     cuda_hello<<<2,5>>>(i);
-    // }
-    // cudaDeviceSynchronize();
 	return EXIT_SUCCESS;
 }
