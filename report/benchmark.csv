@@ -1,3 +1,41 @@
-total_exec_time,parallel_exec_time,serial_exec_time,n_proc
-0.439232, 0.000315, 0.438917, 32
-0.432981, 0.000308, 0.432673, 32
+total_exec_time,parallel_exec_time,serial_exec_time,n_proc,mode,platform
+0.713148, 0.000153, 0.712995, 32, Managed, linux
+0.757332, 0.000177, 0.757155, 32, Managed, linux
+0.721309, 0.000170, 0.721139, 32, Managed, linux
+0.704716, 0.000172, 0.704544, 32, Managed, linux
+0.704906, 0.000169, 0.704737, 32, Managed, linux
+0.737409, 0.000176, 0.737233, 32, Managed, linux
+0.722927, 0.000183, 0.722744, 32, Managed, linux
+0.913221, 0.000218, 0.913003, 32, Managed, linux
+0.667002, 0.000163, 0.666839, 32, Managed, linux
+0.623288, 0.000156, 0.623132, 32, Managed, linux
+0.654684, 0.000157, 0.654527, 32, Managed, linux
+0.697828, 0.000171, 0.697657, 32, Managed, linux
+0.668592, 0.000158, 0.668434, 32, Managed, linux
+0.681056, 0.000161, 0.680895, 32, Managed, linux
+0.671298, 0.000159, 0.671139, 32, Managed, linux
+0.674572, 0.000164, 0.674408, 32, Managed, linux
+0.667180, 0.000160, 0.667020, 32, Managed, linux
+0.671881, 0.000162, 0.671719, 32, Managed, linux
+0.708005, 0.000164, 0.707841, 32, Managed, linux
+0.679642, 0.000175, 0.679467, 32, Managed, linux
+0.330463, 0.000185, 0.330278, 32, Unmanaged, linux
+0.340819, 0.000189, 0.340630, 32, Unmanaged, linux
+0.338666, 0.000204, 0.338462, 32, Unmanaged, linux
+0.341109, 0.000204, 0.340905, 32, Unmanaged, linux
+0.340995, 0.000200, 0.340795, 32, Unmanaged, linux
+0.369990, 0.000182, 0.369808, 32, Unmanaged, linux
+0.365937, 0.000189, 0.365748, 32, Unmanaged, linux
+0.344978, 0.000199, 0.344779, 32, Unmanaged, linux
+0.337206, 0.000196, 0.337010, 32, Unmanaged, linux
+0.331640, 0.000203, 0.331437, 32, Unmanaged, linux
+0.332257, 0.000193, 0.332064, 32, Unmanaged, linux
+0.368014, 0.000223, 0.367791, 32, Unmanaged, linux
+0.373519, 0.000199, 0.373320, 32, Unmanaged, linux
+0.382707, 0.000202, 0.382505, 32, Unmanaged, linux
+0.359119, 0.000193, 0.358926, 32, Unmanaged, linux
+0.341910, 0.000217, 0.341693, 32, Unmanaged, linux
+0.338797, 0.000202, 0.338595, 32, Unmanaged, linux
+0.356372, 0.000250, 0.356122, 32, Unmanaged, linux
+0.335526, 0.000199, 0.335327, 32, Unmanaged, linux
+0.348336, 0.000238, 0.348098, 32, Unmanaged, linux

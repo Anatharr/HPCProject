@@ -15,5 +15,8 @@ run_managed:
 run_unmanaged:
 	./bin/attackUnmanaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
 
+benchmark: 
+	python3 ./src/benchmark.py
+
 clean: 
 	rm ./bin/attack

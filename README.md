@@ -31,9 +31,8 @@ To ensure that the sources are correctly compiled and that the binary will get t
 
 ### TODO
 
-- [ ] nice documentation (func docstring, comments)
-- [ ] correct use of naming case
+- [x] nice documentation (func docstring, comments)
 - [x] clean pre-link directive 
 - [x] optimisation  shadow_size, `if index > shadow_size` -> do nothing
-- [ ] if a hash is already found, put him in memory to optimize the next guesses
-- [ ] `cudaMalloc` use, without the managed 
+- [x] if a hash is already found, put him in memory to optimize the next guesses
+- [x] `cudaMalloc` use, without the managed 

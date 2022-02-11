@@ -10,6 +10,12 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32)
+    #define PLATFORM_NAME "windows" // Windows
+#elif defined(__linux__)
+    #define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
+#endif
+
 #define DEBUG false
 #define WL_BLOCK 1000
 #define MAX_LINE_LENGTH 200
@@ -262,7 +268,7 @@ int main(int argc, char *argv[])
 #endif
 
 	FILE* csv_fp = fopen("./report/benchmark.csv", "a");
-	fprintf(csv_fp,"\n%lf, %lf, %lf, %d", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
+	fprintf(csv_fp,"\n%lf, %lf, %lf, %d, %s, %s", total_exec_time, parallel_exec_time, serial_exec_time, M*T, "Managed", PLATFORM_NAME);
 	fclose(csv_fp);
 	return 0;
 }
