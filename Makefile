@@ -10,10 +10,13 @@ optimized:
 	nvcc ./src/multiattackOptimized.cu -o ./bin/attackOptimized
 
 run_managed:
-	./bin/attackManaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
+	./bin/attackManaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadow.txt 
 
 run_unmanaged:
-	./bin/attackUnmanaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
+	./bin/attackUnmanaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadow.txt 
+
+run_optimized:
+	./bin/attackOptimized ./src/wordlists/dict_sha.txt ./src/hash_db/shadow.txt 
 
 benchmark: 
 	python ./src/benchmark.py
