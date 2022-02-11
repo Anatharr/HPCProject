@@ -40,12 +40,14 @@ __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_ha
 				}
 			}
 			if (ok) {
-				printf("[+] FOUND %s for hash %s (shadow_index = %d)\n", wordlist_block_plain[i], current_hash, index);
+				printf("\u001b[32m[+] FOUND \u001b[33;1m%s\u001b[0;32m for hash %s (shadow_index = %d)\n\u001b[0m", wordlist_block_plain[i], current_hash, index);
 				break;
 			}
 		}
 	}
 }
+
+// float speedUp(float T, )
 
 int main(int argc, char *argv[])
 {
