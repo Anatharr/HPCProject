@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <string.h>
+#include <time.h>
 
 #define DEBUG false
 #define WL_BLOCK 1000
@@ -15,7 +16,6 @@
 
 // Progress bar
 #define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
-#define PBWIDTH 60
 
 __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_hash, int lines, char **shadow_db, int shadow_count)
 {
@@ -52,8 +52,6 @@ __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_ha
 	}
 }
 
-// float speedUp(float T, )
-
 int countlines_from_fp(FILE *fp)
 {
 	// count the number of lines in the file called filename
@@ -89,6 +87,8 @@ void updatePBar(int current_block, int total_num_of_block)
 
 int main(int argc, char *argv[])
 {
+	clock_t total_time_beg = clock();
+	double parallel_exec_time = 0;
 	bool DISABLE_PBAR = false;
 	double M_T_RATIO = 0.5;
 
@@ -220,7 +220,11 @@ int main(int argc, char *argv[])
 		cudaMallocManaged(&lineBuffer_hashGPU, lines * sizeof(char *));
 		cudaMemcpy(lineBuffer_hashGPU, lineBuffer_hash, lines * sizeof(char *), cudaMemcpyHostToDevice);
 
+		clock_t parrallel_exec_time_beg = clock();
 		check_hash<<<M, T>>>(lineBuffer_plainGPU, lineBuffer_hashGPU, lines, shadow_dbGPU, shadow_count);
+		clock_t parrallel_exec_time_end = clock();
+		double parallel_instance_time_spent = (double)(parrallel_exec_time_end - parrallel_exec_time_beg) / CLOCKS_PER_SEC;
+		parallel_exec_time += parallel_instance_time_spent;  
 
 		// for (int i = 0; i < lines; i++)
 		// {
@@ -230,5 +234,20 @@ int main(int argc, char *argv[])
 		cudaDeviceSynchronize();
 	}
 
+	/* ------------ Benchmarking - writing results to csv ---------- */
+	clock_t total_time_end = clock();
+
+	// Computing the times
+	double total_exec_time = (double)(total_time_end - total_time_beg) / CLOCKS_PER_SEC;
+	//parallel_exec_time
+	double serial_exec_time = total_exec_time - parallel_exec_time;
+
+#if DEBUG
+	printf("\n[DEBUG] Times : \n- total exec time = %lfs\n- parallel_exec_time = %lfs\n- serial_exec_time = %lfs\n- number of processes = %d\n", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
+#endif
+
+	FILE* csv_fp = fopen("./report/benchmark.csv", "a");
+	fprintf(csv_fp,"\n%lf, %lf, %lf, %d\n", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
+	fclose(csv_fp);
 	return 0;
 }
