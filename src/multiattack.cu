@@ -104,7 +104,6 @@ int main(int argc, char *argv[])
 	// 	}
 	// #endif
 
-
 	/* ------- Optimizing number of threads & blocks based on 0.5 ratio ------ */
 	int M = ceil((double)shadow_count / sqrt((shadow_count / 0.5)));
 	int T = ceil((double)shadow_count / (double)M);
