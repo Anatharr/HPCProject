@@ -11,15 +11,15 @@
 #include <time.h>
 
 #if defined(_WIN32)
-    #define PLATFORM_NAME "windows" // Windows
+#define PLATFORM_NAME "windows" // Windows
 #elif defined(__linux__)
-    #define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
+#define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
 #endif
 
 #define DEBUG false
+#define M_T_RATIO 0.5
 #define WL_BLOCK 1000
 #define MAX_LINE_LENGTH 200
-#define MAX_SHADOW_LENGTH 5000
 #define MAX_HASH_LENGTH 50
 
 // Progress bar
@@ -32,7 +32,7 @@
  * @param lines (int) number of entry in the wordlist block
  * @param shadow_db (char **)
  * @param shadow_count (int) number of hashes in the shadow file
-*/
+ */
 __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_hash, int lines, char **shadow_db, int shadow_count)
 {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -72,7 +72,7 @@ __global__ void check_hash(char **wordlist_block_plain, char **wordlist_block_ha
  * @brief count the lines in a file specified by his opaque stream type
  * @param fp (FILE*) pointer to the stream file
  * @return the number of lines in the file
-*/
+ */
 int countlines_from_fp(FILE *fp)
 {
 	// count the number of lines in the file called filename
@@ -97,10 +97,10 @@ int countlines_from_fp(FILE *fp)
 }
 
 /**
- * Update the progress bar according to the current wordlist block treated regarding the total number of wordlist blocks 
+ * Update the progress bar according to the current wordlist block treated regarding the total number of wordlist blocks
  * @param current_block (int) index of the current wordlist block treated
  * @param total_num_of_block (int) total number of wordlist blocks
-*/
+ */
 void updatePBar(int current_block, int total_num_of_block)
 {
 	double percentage = (double)current_block / total_num_of_block;
@@ -116,7 +116,7 @@ int main(int argc, char *argv[])
 	clock_t total_time_beg = clock();
 	double parallel_exec_time = 0;
 	bool DISABLE_PBAR = false;
-	double M_T_RATIO = 0.5;
+	int MAX_SHADOW_LENGTH = 5000;
 
 	// parsing arguments
 	switch (argc)
@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 	case 5:
 		DISABLE_PBAR = (bool)atoi(argv[4]);
 	case 4:
-		sscanf(argv[3], "%lf", &M_T_RATIO);
+		sscanf(argv[3], "%d", &MAX_SHADOW_LENGTH);
 	case 3:
 		break;
 	default:
@@ -152,36 +152,24 @@ int main(int argc, char *argv[])
 	}
 
 	/* ------------- Loading shadow db into device ------------- */
-	char *shadow_db[MAX_SHADOW_LENGTH];
-	char **shadow_dbGPU;
+	char **shadow_db;
 	char buf[MAX_LINE_LENGTH];
 	int shadow_count = 0;
 
-	while ((fgets(buf, MAX_LINE_LENGTH, shadow_file)) != NULL)
+	cudaMallocManaged(&shadow_db, MAX_SHADOW_LENGTH * sizeof(char *));
+
+	while (shadow_count < MAX_SHADOW_LENGTH && (fgets(buf, MAX_LINE_LENGTH, shadow_file)) != NULL)
 	{
 		buf[strlen(buf) - 1] = '\0'; // remove the trailing newline
-#if DEBUG
-		printf("address:%p -> %s\n", buf, buf);
-#endif
 		cudaMallocManaged(&shadow_db[shadow_count], strlen(buf));
-		cudaMemcpy(shadow_db[shadow_count], buf, strlen(buf), cudaMemcpyHostToDevice);
+		strcpy(shadow_db[shadow_count], buf);
 		shadow_count++;
 	}
-
-	cudaMallocManaged(&shadow_dbGPU, shadow_count * sizeof(char *));
-	cudaMemcpy(shadow_dbGPU, shadow_db, shadow_count * sizeof(char *), cudaMemcpyHostToDevice);
-
-	// #if DEBUG
-	// 	printf("[DEBUG] Shadow content - head : \n");
-	// 	for (int i = 0; i < 10; i++)
-	// 	{
-	// 		printf("[%i] : %s\n", i, shadow_db[i]);
-	// 	}
-	// #endif
+	printf("Read %d/%d hashes from shadow file\n", shadow_count, MAX_SHADOW_LENGTH);
 
 	/* ------- Optimizing number of threads & blocks ------ */
-	int M = ceil((double)shadow_count / sqrt((shadow_count / M_T_RATIO)));
-	int T = ceil((double)shadow_count / (double)M);
+	int T = ceil(sqrt((double)shadow_count / (double)M_T_RATIO));
+	int M = ceil((double)shadow_count / (double)T);
 
 #if DEBUG
 	printf("[DEBUG] Computed values : M=%d ; T=%d\n", M, T);
@@ -197,9 +185,13 @@ int main(int argc, char *argv[])
 
 		size_t lines = 0; /** next index to be used with lineBuffer
 					(and number of lines already stored)*/
-		char *lineBuffer_plain[WL_BLOCK];
-		char *lineBuffer_hash[WL_BLOCK];
+		char **lineBuffer_plain;
+		char **lineBuffer_hash;
 		char buf[MAX_LINE_LENGTH];
+
+		cudaMallocManaged(&lineBuffer_plain, WL_BLOCK * sizeof(char *));
+		cudaMallocManaged(&lineBuffer_hash, WL_BLOCK * sizeof(char *));
+
 		while (lines < WL_BLOCK && fgets(buf, sizeof(buf), wordlist_file) != NULL)
 		{
 			char *plain, *hash;
@@ -221,10 +213,11 @@ int main(int argc, char *argv[])
 			}
 
 			cudaMallocManaged(&lineBuffer_plain[lines], strlen(plain) * sizeof(char));
-			cudaMemcpy(lineBuffer_plain[lines], plain, strlen(plain), cudaMemcpyHostToDevice);
-
 			cudaMallocManaged(&lineBuffer_hash[lines], strlen(hash) * sizeof(char));
-			cudaMemcpy(lineBuffer_hash[lines], hash, strlen(hash), cudaMemcpyHostToDevice);
+
+			strcpy(lineBuffer_plain[lines], plain);
+			strcpy(lineBuffer_hash[lines], hash);
+
 			lines++;
 		}
 		if (lines == 0)
@@ -234,36 +227,45 @@ int main(int argc, char *argv[])
 #if DEBUG
 		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 #endif
-		char **lineBuffer_plainGPU, **lineBuffer_hashGPU;
-		cudaMallocManaged(&lineBuffer_plainGPU, lines * sizeof(char *));
-		cudaMemcpy(lineBuffer_plainGPU, lineBuffer_plain, lines * sizeof(char *), cudaMemcpyHostToDevice);
-
-		cudaMallocManaged(&lineBuffer_hashGPU, lines * sizeof(char *));
-		cudaMemcpy(lineBuffer_hashGPU, lineBuffer_hash, lines * sizeof(char *), cudaMemcpyHostToDevice);
 
 		clock_t parrallel_exec_time_beg = clock();
-		check_hash<<<M, T>>>(lineBuffer_plainGPU, lineBuffer_hashGPU, lines, shadow_dbGPU, shadow_count);
+		check_hash<<<M, T>>>(lineBuffer_plain, lineBuffer_hash, lines, shadow_db, shadow_count);
 		cudaDeviceSynchronize();
 		clock_t parrallel_exec_time_end = clock();
 		double parallel_instance_time_spent = (double)(parrallel_exec_time_end - parrallel_exec_time_beg) / CLOCKS_PER_SEC;
-		parallel_exec_time += parallel_instance_time_spent;  
+		parallel_exec_time += parallel_instance_time_spent;
 
+		/* ------------ Free wordlist block ------------ */
+		for (int i = 0; i < lines; i++)
+		{
+			cudaFree(lineBuffer_plain[i]);
+			cudaFree(lineBuffer_hash[i]);
+		}
+		cudaFree(lineBuffer_hash);
+		cudaFree(lineBuffer_plain);
 	}
+
+	/* ------------ Free loaded shadow file ------------ */
+	for (int i = 0; i < shadow_count; i++)
+	{
+		cudaFree(shadow_db[i]);
+	}
+	cudaFree(shadow_db);
 
 	/* ------------ Benchmarking - writing results to csv ---------- */
 	clock_t total_time_end = clock();
 
 	// Computing the times
 	double total_exec_time = (double)(total_time_end - total_time_beg) / CLOCKS_PER_SEC;
-	//parallel_exec_time
+	// parallel_exec_time
 	double serial_exec_time = total_exec_time - parallel_exec_time;
 
 #if DEBUG
-	printf("\n[DEBUG] Times : \n- total exec time = %lfs\n- parallel_exec_time = %lfs\n- serial_exec_time = %lfs\n- number of processes = %d\n", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
+	printf("\n[DEBUG] Times : \n- total exec time = %lfs\n- parallel_exec_time = %lfs\n- serial_exec_time = %lfs\n- number of processes = %d\n", total_exec_time, parallel_exec_time, serial_exec_time, M * T);
 #endif
 
-	FILE* csv_fp = fopen("./report/benchmark.csv", "a");
-	fprintf(csv_fp,"\n%lf, %lf, %lf, %d, %s, %s", total_exec_time, parallel_exec_time, serial_exec_time, M*T, "Managed", PLATFORM_NAME);
+	FILE *csv_fp = fopen("./report/benchmark.csv", "a");
+	fprintf(csv_fp, "\n%lf, %lf, %lf, %d, %d, %s, %s", total_exec_time, parallel_exec_time, serial_exec_time, M*T, shadow_count, "Managed", PLATFORM_NAME);
 	fclose(csv_fp);
 	return 0;
 }

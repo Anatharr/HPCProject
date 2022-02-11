@@ -1,1 +1,1 @@
-total_exec_time,parallel_exec_time,serial_exec_time,n_proc,mode,os
+total_exec_time,parallel_exec_time,serial_exec_time,n_proc,n_hash,mode,os

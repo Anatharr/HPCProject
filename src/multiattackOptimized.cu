@@ -1,7 +1,7 @@
 /*
  * multiattackManaged.cu
- * First version of our program using only cudaMallocManagedManaged(),
- * which is significantly slower than cudaMallocManaged()
+ * First version of our program using only cudaMallocManaged(),
+ * which is significantly slower than cudaMalloc()
  */
 
 #include <stdio.h>
@@ -10,7 +10,13 @@
 #include <string.h>
 #include <time.h>
 
-#define DEBUG false
+#if defined(_WIN32)
+    #define PLATFORM_NAME "windows" // Windows
+#elif defined(__linux__)
+    #define PLATFORM_NAME "linux" // Debian, Ubuntu, Gentoo, Fedora, openSUSE, RedHat, Centos and other
+#endif
+
+#define DEBUG true
 #define WL_BLOCK 1000
 #define MAX_LINE_LENGTH 200
 #define MAX_SHADOW_LENGTH 5000
@@ -157,13 +163,13 @@ int main(int argc, char *argv[])
 	while ((fgets(buf, MAX_LINE_LENGTH, shadow_file)) != NULL)
 	{
 		buf[strlen(buf) - 1] = '\0'; // remove the trailing newline
-		cudaMallocManaged(&shadow_db[shadow_count], strlen(buf));
+		cudaMalloc(&shadow_db[shadow_count], strlen(buf));
 		cudaMemcpy(shadow_db[shadow_count], buf, strlen(buf), cudaMemcpyHostToDevice);
 		shadow_count++;
 	}
 
 	char **shadow_dbGPU;
-	cudaMallocManaged(&shadow_dbGPU, shadow_count * sizeof(char *));
+	cudaMalloc(&shadow_dbGPU, shadow_count * sizeof(char *));
 	cudaMemcpy(shadow_dbGPU, shadow_db, shadow_count * sizeof(char *), cudaMemcpyHostToDevice);
 
 
@@ -171,13 +177,15 @@ int main(int argc, char *argv[])
 	int found_hashes[MAX_SHADOW_LENGTH];
 	memset(found_hashes,-1,MAX_SHADOW_LENGTH);
 	int *found_hashesGPU;
-	cudaMallocManaged(&found_hashesGPU, shadow_count * sizeof(int));
+	printf("%p %p\n", found_hashes, found_hashesGPU);
+	cudaMalloc(&found_hashesGPU, shadow_count * sizeof(int));
 	cudaMemcpy(found_hashesGPU, found_hashes, shadow_count * sizeof(int), cudaMemcpyHostToDevice);
 
 
 	/* ------- Optimizing number of threads & blocks ------ */
-	int M = ceil((double)shadow_count / sqrt((shadow_count / M_T_RATIO)));
-	int T = ceil((double)shadow_count / (double)M);
+	int T = ceil(sqrt((double)shadow_count / (double)M_T_RATIO));
+	int M = ceil((double)shadow_count / (double)T);
+
 
 #if DEBUG
 	printf("[DEBUG] Computed values : M=%d ; T=%d\n", M, T);
@@ -216,10 +224,10 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			cudaMallocManaged(&lineBuffer_plain[lines], strlen(plain) * sizeof(char));
+			cudaMalloc(&lineBuffer_plain[lines], strlen(plain) * sizeof(char));
 			cudaMemcpy(lineBuffer_plain[lines], plain, strlen(plain), cudaMemcpyHostToDevice);
 
-			cudaMallocManaged(&lineBuffer_hash[lines], strlen(hash) * sizeof(char));
+			cudaMalloc(&lineBuffer_hash[lines], strlen(hash) * sizeof(char));
 			cudaMemcpy(lineBuffer_hash[lines], hash, strlen(hash), cudaMemcpyHostToDevice);
 			lines++;
 		}
@@ -231,10 +239,10 @@ int main(int argc, char *argv[])
 		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 #endif
 		char **lineBuffer_plainGPU, **lineBuffer_hashGPU;
-		cudaMallocManaged(&lineBuffer_plainGPU, lines * sizeof(char *));
+		cudaMalloc(&lineBuffer_plainGPU, lines * sizeof(char *));
 		cudaMemcpy(lineBuffer_plainGPU, lineBuffer_plain, lines * sizeof(char *), cudaMemcpyHostToDevice);
 
-		cudaMallocManaged(&lineBuffer_hashGPU, lines * sizeof(char *));
+		cudaMalloc(&lineBuffer_hashGPU, lines * sizeof(char *));
 		cudaMemcpy(lineBuffer_hashGPU, lineBuffer_hash, lines * sizeof(char *), cudaMemcpyHostToDevice);
 
 		clock_t parrallel_exec_time_beg = clock();
@@ -245,12 +253,12 @@ int main(int argc, char *argv[])
 		parallel_exec_time += parallel_instance_time_spent;  
 
 		/* ------------ Free wordlist block ------------ */
-		// for (int i=0; i<lines; i++) {
-		// 	cudaFree(lineBuffer_plain[i]);
-		// 	cudaFree(lineBuffer_hash[i]);
-		// }
-		// cudaFree(lineBuffer_hashGPU);
-		// cudaFree(lineBuffer_plainGPU);
+		for (int i=0; i<lines; i++) {
+			cudaFree(lineBuffer_plain[i]);
+			cudaFree(lineBuffer_hash[i]);
+		}
+		cudaFree(lineBuffer_hashGPU);
+		cudaFree(lineBuffer_plainGPU);
 	}
 
 	/* ------------ Print results and clean up loaded arrays ------------ */
@@ -259,13 +267,13 @@ int main(int argc, char *argv[])
 	printf("\n");
 	for (int i=0; i<shadow_count; i++) {
 		if (found_hashes[i] != -1) {
-			printf("\u001b[32m[+] FOUND index \u001b[33;1m%d\u001b[0;32m of wordlist for shadow index %d\n\u001b[0m", found_hashes[i], i);
+			// printf("\u001b[32m[+] FOUND index \u001b[33;1m%d\u001b[0;32m of wordlist for shadow index %d\n\u001b[0m", found_hashes[i], i);
 		}
 
-		// cudaFree(shadow_db[i]);
+		cudaFree(shadow_db[i]);
 	}
-	// cudaFree(found_hashesGPU);
-	// cudaFree(shadow_dbGPU);
+	cudaFree(found_hashesGPU);
+	cudaFree(shadow_dbGPU);
 
 
 	/* ------------ Benchmarking - writing results to csv ---------- */
@@ -281,7 +289,7 @@ int main(int argc, char *argv[])
 #endif
 
 	FILE* csv_fp = fopen("./report/benchmark.csv", "a");
-	fprintf(csv_fp,"\n%lf, %lf, %lf, %d\n", total_exec_time, parallel_exec_time, serial_exec_time, M*T);
+	fprintf(csv_fp,"\n%lf, %lf, %lf, %s, %s, %d", total_exec_time, parallel_exec_time, serial_exec_time, "Optimized", PLATFORM_NAME, M *T);
 	fclose(csv_fp);
 	return 0;
 }
