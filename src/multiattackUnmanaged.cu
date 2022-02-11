@@ -1,6 +1,8 @@
-// multiattack.c
-// Starts multiple instances checking if a password can be found in the dictionnary.
-// usage : nb_of_processus dictionnary_file shasum_file
+/*
+ * multiattackManaged.cu
+ * First version of our program using only cudaMallocManaged(),
+ * which is significantly slower than cudaMalloc()
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,23 +95,20 @@ int main(int argc, char *argv[])
 	double M_T_RATIO = 0.5;
 
 	// parsing arguments
-	bool error_flag = false;
-	if (argc < 3)
-		error_flag = true;
-	else if (argc == 4)
+	switch (argc)
 	{
+	case 3:
+		break;
+	case 4:
 		sscanf(argv[3], "%lf", &M_T_RATIO);
-	}
-	else if (argc == 5)
-	{
+		break;
+	case 5:
 		DISABLE_PBAR = (bool)atoi(argv[4]);
+		break;
+	default:
+		fprintf(stderr, "Usage: '%s' dictionnary_file shasum_file [ratio] [disable_pbar]\n", argv[0]), exit(EXIT_FAILURE);
+		break;
 	}
-	else if (argc > 5)
-	{
-		error_flag = true;
-	}
-	if (error_flag)
-		fprintf(stderr, "Usage: '%s' dictionnary_file shasum_file\n", argv[0]), exit(EXIT_FAILURE);
 	char *dict_file = argv[1];
 	char *shasum_file = argv[2];
 
@@ -142,21 +141,13 @@ int main(int argc, char *argv[])
 #if DEBUG
 		printf("address:%p -> %s\n", buf, buf);
 #endif
-		cudaMallocManaged(&shadow_db[shadow_count], strlen(buf));
+		cudaMalloc(&shadow_db[shadow_count], strlen(buf));
 		cudaMemcpy(shadow_db[shadow_count], buf, strlen(buf), cudaMemcpyHostToDevice);
 		shadow_count++;
 	}
 
-	cudaMallocManaged(&shadow_dbGPU, shadow_count * sizeof(char *));
+	cudaMalloc(&shadow_dbGPU, shadow_count * sizeof(char *));
 	cudaMemcpy(shadow_dbGPU, shadow_db, shadow_count * sizeof(char *), cudaMemcpyHostToDevice);
-
-	// #if DEBUG
-	// 	printf("[DEBUG] Shadow content - head : \n");
-	// 	for (int i = 0; i < 10; i++)
-	// 	{
-	// 		printf("[%i] : %s\n", i, shadow_db[i]);
-	// 	}
-	// #endif
 
 	/* ------- Optimizing number of threads & blocks ------ */
 	int M = ceil((double)shadow_count / sqrt((shadow_count / M_T_RATIO)));
@@ -199,10 +190,10 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			cudaMallocManaged(&lineBuffer_plain[lines], strlen(plain) * sizeof(char));
+			cudaMalloc(&lineBuffer_plain[lines], strlen(plain) * sizeof(char));
 			cudaMemcpy(lineBuffer_plain[lines], plain, strlen(plain), cudaMemcpyHostToDevice);
 
-			cudaMallocManaged(&lineBuffer_hash[lines], strlen(hash) * sizeof(char));
+			cudaMalloc(&lineBuffer_hash[lines], strlen(hash) * sizeof(char));
 			cudaMemcpy(lineBuffer_hash[lines], hash, strlen(hash), cudaMemcpyHostToDevice);
 			lines++;
 		}
@@ -214,10 +205,10 @@ int main(int argc, char *argv[])
 		printf("[+] Assigned block %d (read %zd lines)\n", block_counter, lines);
 #endif
 		char **lineBuffer_plainGPU, **lineBuffer_hashGPU;
-		cudaMallocManaged(&lineBuffer_plainGPU, lines * sizeof(char *));
+		cudaMalloc(&lineBuffer_plainGPU, lines * sizeof(char *));
 		cudaMemcpy(lineBuffer_plainGPU, lineBuffer_plain, lines * sizeof(char *), cudaMemcpyHostToDevice);
 
-		cudaMallocManaged(&lineBuffer_hashGPU, lines * sizeof(char *));
+		cudaMalloc(&lineBuffer_hashGPU, lines * sizeof(char *));
 		cudaMemcpy(lineBuffer_hashGPU, lineBuffer_hash, lines * sizeof(char *), cudaMemcpyHostToDevice);
 
 		clock_t parrallel_exec_time_beg = clock();
@@ -226,13 +217,20 @@ int main(int argc, char *argv[])
 		double parallel_instance_time_spent = (double)(parrallel_exec_time_end - parrallel_exec_time_beg) / CLOCKS_PER_SEC;
 		parallel_exec_time += parallel_instance_time_spent;  
 
-		// for (int i = 0; i < lines; i++)
-		// {
-		//     free(lineBuffer[i]);
-		// }
-
-		cudaDeviceSynchronize();
+		/* ------------ Free wordlist block ------------ */
+		for (int i=0; i<lines; i++) {
+			cudaFree(lineBuffer_plain[i]);
+			cudaFree(lineBuffer_hash[i]);
+		}
+		cudaFree(lineBuffer_hashGPU);
+		cudaFree(lineBuffer_plainGPU);
 	}
+
+	/* ------------ Free loaded shadow file ------------ */
+	for (int i=0; i<shadow_count; i++) {
+		cudaFree(shadow_db[i]);
+	}
+	cudaFree(shadow_dbGPU);
 
 	/* ------------ Benchmarking - writing results to csv ---------- */
 	clock_t total_time_end = clock();
