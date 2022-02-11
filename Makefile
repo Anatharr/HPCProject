@@ -9,8 +9,14 @@ unmanaged:
 optimized:
 	nvcc ./src/multiattackOptimized.cu -o ./bin/attackOptimized
 
-run:
-	./bin/attack ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
+run_managed:
+	./bin/attackManaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
+
+run_unmanaged:
+	./bin/attackUnmanaged ./src/wordlists/dict_sha.txt ./src/hash_db/shadowSmall.txt 
+
+benchmark: 
+	python3 ./src/benchmark.py
 
 clean: 
 	rm ./bin/attack
