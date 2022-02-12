@@ -7,7 +7,7 @@ DISABLE_PBAR = True
 def run_benchmark(n_proc_max=100, modes = ["Managed"]):
 
     for mode in modes:
-        for n_proc in range(1, n_proc_max, 10):
+        for n_proc in range(1, n_proc_max, 100):
             COMMAND_NAME = f"./bin/attack{mode}" if platform.system() == 'Linux' else f".\\bin\\attack{mode}.exe"
 
             print(f"[+] Running multiattack with mode={mode} and n_proc={n_proc}")
